@@ -7,9 +7,8 @@ on:
   pull_request:
     branches:
       - main
-
-#  schedule:
-#    - cron: '*/5 * * * *'
+  schedule:
+    - cron: '*/10 * * * *'
 
 jobs:
   tests:
@@ -17,7 +16,7 @@ jobs:
     strategy:
       matrix:
         php-versions: ['8.3']
-    name: integration-tests (PHP ${{ matrix.php-versions }})
+    name: run-script (PHP ${{ matrix.php-versions }})
     steps:
       - uses: actions/checkout@v1
       - name: Install PHP
@@ -37,19 +36,27 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.php-version }}-composer-${{ matrix.dependencies }}-${{ hashFiles('**/composer.lock') }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.php-version }}-composer-${{ matrix.dependencies }}-
-
       - name: Install dependencies
         run: |
           composer update --prefer-dist --no-progress
-      - name: Run test suite
+      - name: Write OCI private key to a temp file
         run: |
-          vendor/bin/phpunit --color tests/
+          echo "${{ secrets.OCI_PRIVATE_KEY_CONTENT }}" > "$RUNNER_TEMP/oci_api_key.pem"
+          chmod 600 "$RUNNER_TEMP/oci_api_key.pem"
+
+      # ATENCAO: manter o gatilho "schedule" abaixo rodando indefinidamente pode violar
+      # os Termos de Uso do GitHub Actions (uso de runners hospedados para algo que nao
+      # e producao/teste do projeto). Assim que a VM for criada com sucesso, remova ou
+      # comente o bloco "schedule" no inicio deste arquivo (ou apague este workflow).
+      - name: Run script
+        run: |
+          php index.php
         env:
           OCI_REGION: ${{ secrets.OCI_REGION }}
           OCI_USER_ID: ${{ secrets.OCI_USER_ID }}
           OCI_TENANCY_ID: ${{ secrets.OCI_TENANCY_ID }}
           OCI_KEY_FINGERPRINT: ${{ secrets.OCI_KEY_FINGERPRINT }}
-          OCI_PRIVATE_KEY_FILENAME: ${{ secrets.OCI_PRIVATE_KEY_FILENAME }}
+          OCI_PRIVATE_KEY_FILENAME: ${{ runner.temp }}/oci_api_key.pem
           OCI_AVAILABILITY_DOMAIN: ${{ secrets.OCI_AVAILABILITY_DOMAIN }}
           OCI_SUBNET_ID: ${{ secrets.OCI_SUBNET_ID }}
           OCI_IMAGE_ID: ${{ secrets.OCI_IMAGE_ID }}
@@ -60,4 +67,3 @@ jobs:
           OCI_SSH_PUBLIC_KEY: ${{ secrets.OCI_SSH_PUBLIC_KEY }}
           TELEGRAM_USER_ID: ${{ secrets.TELEGRAM_USER_ID }}
           TELEGRAM_BOT_API_KEY: ${{ secrets.TELEGRAM_BOT_API_KEY }}
-
